@@ -8,3 +8,8 @@ Generates a new random jigsaw puzzle on each refresh.
 
 `yarn start`
 
+# Try it out 
+
+https://puzzlev1.netlify.com/
+
+

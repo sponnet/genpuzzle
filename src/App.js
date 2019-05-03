@@ -17,7 +17,7 @@ function App() {
             <div className="tabs is-centered">
               <ul>
                 <li>
-                  <a className="" href="https://github/sponnet/genpuzzle">
+                  <a className="" href="https://github.com/sponnet/genpuzzle">
                     github
                   </a>
                 </li>
