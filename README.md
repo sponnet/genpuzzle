@@ -2,24 +2,9 @@
 
 Generates a new random jigsaw puzzle on each refresh.
 
-## Installing
+# Install
 
-```
-npm install -g http-server
-http-server
-```
+`yarn`
 
-or
-
-```
-python -m SimpleHTTPServer
-```
-
-and open a browser..
-
-## Example
-
-http://puzzlev1.bitballoon.com/
-
-
+`yarn start`
 
