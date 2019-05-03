@@ -3,6 +3,10 @@ import Voronoi from "voronoi";
 import makerjs from "makerjs";
 import { Point } from "paper";
 import Prando from "prando";
+import "bulma/css/bulma.css";
+// import "bulma-extensions/bulma-slider/dist/css/bulma-slider.min.css";
+// import "bulma-extensions/bulma-slider/dist/js/bulma-slider.min.js";
+import "bulma-extensions/bulma-checkradio/dist/css/bulma-checkradio.min.css";
 
 class N extends Component {
   constructor(props) {
@@ -12,8 +16,10 @@ class N extends Component {
     this.rng = new Prando();
 
     this.pieces = 50;
+    this.relaxit = true;
 
     this.state = {
+      relaxit: this.relaxit,
       pieces: this.pieces,
       stats_pieces: undefined,
       stats_arcs: undefined
@@ -39,6 +45,8 @@ class N extends Component {
     this.setState({
       pieces: amount
     });
+    this.randomSites();
+    this.renderVornoi();
   }
 
   //----
@@ -49,67 +57,42 @@ class N extends Component {
     }
 
     this.voronoi = new Voronoi();
-    this.sites = [];
-    // this.diagram = null;
+
+    this.diagram = null;
     this.margin = 0;
     this.svg = null;
-
-    this.pathArray = [];
-    this.arcbounds = [];
 
     this.randomSites();
     this.renderVornoi();
   }
 
   randomSites() {
-    let x = 0;
-    let y = 0;
+    //debugger;
+    const margin = 0.1; //percent
 
-    const margin = 3; //percent
+    // const xl = (this.bbox.xr * margin) / 100;
+    // const xr = (this.bbox.xr * (100 - 2 * margin)) / 100;
+    // const yt = (this.bbox.yb * margin) / 100;
+    // const yb = (this.bbox.yb * (100 - 2 * margin)) / 100;
 
-    const xl = (this.bbox.xr * margin) / 100;
-    const xr = (this.bbox.xr * (100 - 2 * margin)) / 100;
-    const yt = (this.bbox.yb * margin) / 100;
-    const yb = (this.bbox.yb * (100 - 2 * margin)) / 100;
+    const xmargin = this.bbox.xr * this.margin;
+    const ymargin = this.bbox.yb * this.margin;
+    const xo = xmargin;
+    const dx = this.bbox.xr - xmargin * 2;
+    const yo = ymargin;
+    const dy = this.bbox.yb - ymargin * 2;
 
-    for (let i = 0; i < this.pieces; i++) {
-      x = xl + Math.random() * xr; // % xr;
-      y = yt + Math.random() * yb; //  % yb;
-      // x = this.rng.next(xl, xr); // % xr;
-      // y = this.rng.next(yt, yb); //  % yb;
-
-      const point = {
-        x: x,
-        y: y
-      };
-
-      // console.log(this.rng.nextInt(0, this.bbox.xr), point);
-
-      //this.sites.push(point);
-
-      this.pathArray.push({
-        type: "circle",
-        origin: [point.x, point.y],
-        radius: 4
+    this.sites = [];
+    for (var i = 0; i < this.pieces; i++) {
+      this.sites.push({
+        x: Math.round((xo + Math.random() * dx) * 10) / 10,
+        y: Math.round((yo + Math.random() * dy) * 10) / 10
       });
     }
 
-    // for (var y = 0; y < Math.sqrt(n); y++)
-    //   for (var x = 0; x < Math.sqrt(n); x++) {
-    //     const point = {
-    //       x: (x * dx) / Math.sqrt(n) + 0.1 * this.rng.next() * dx, //xo + this.rng.next() * dx + this.rng.next() / dx,
-    //       y: (y * dy) / Math.sqrt(n) + 0.15 * this.rng.next() * dy //yo + this.rng.next() * dy + this.rng.next() / dy
-    //     };
-    //     this.sites.push(point);
-
-    //     this.pathArray.push({
-    //       type: "circle",
-    //       origin: [point.x, point.y],
-    //       radius: 4
-    //     });
-    //   }
     this.voronoi.recycle(this.diagram);
     this.diagram = this.voronoi.compute(this.sites, this.bbox);
+    this.relaxSites();
   }
 
   // manipulate the edge
@@ -134,7 +117,7 @@ class N extends Component {
 
     // is this edge too small to contain a tip ?
     const isEdgeTooSmall = size => {
-      return size < this.bbox.xr / 60;
+      return size < this.bbox.xr / 90;
     };
 
     const arcFallsOutsideOfBoundingBox = arc => {
@@ -234,10 +217,108 @@ class N extends Component {
     this.pathArray.push(new makerjs.paths.Line([x0, y0], [x1, y1]));
   }
 
+  relaxSites() {
+    // debugger;
+    if (!this.diagram) {
+      return;
+    }
+    var cells = this.diagram.cells,
+      iCell = cells.length,
+      cell,
+      site,
+      sites = [],
+      again = false,
+      rn,
+      dist;
+    var p = (1 / iCell) * 0.1;
+    while (iCell--) {
+      cell = cells[iCell];
+      rn = Math.random();
+      // probability of apoptosis
+      if (rn < p) {
+        continue;
+      }
+      site = this.cellCentroid(cell);
+      dist = this.distance(site, cell.site);
+      again = again || dist > 1;
+      // don't relax too fast
+      // if (dist > 2) {
+      //   site.x = (site.x + cell.site.x) / 2;
+      //   site.y = (site.y + cell.site.y) / 2;
+      // }
+      // probability of mytosis
+      if (rn > 1 - p) {
+        dist /= 2;
+        sites.push({
+          x: site.x + (site.x - cell.site.x) / dist,
+          y: site.y + (site.y - cell.site.y) / dist
+        });
+      }
+      sites.push(site);
+    }
+    this.diagram = this.voronoi.compute(sites, this.bbox);
+
+    this.renderVornoi();
+
+    if (this.relaxit) {
+      setTimeout(() => {
+        this.relaxSites();
+      }, 0);
+    }
+  }
+
+  distance(a, b) {
+    var dx = a.x - b.x,
+      dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  cellArea(cell) {
+    var area = 0,
+      halfedges = cell.halfedges,
+      iHalfedge = halfedges.length,
+      halfedge,
+      p1,
+      p2;
+    while (iHalfedge--) {
+      halfedge = halfedges[iHalfedge];
+      p1 = halfedge.getStartpoint();
+      p2 = halfedge.getEndpoint();
+      area += p1.x * p2.y;
+      area -= p1.y * p2.x;
+    }
+    area /= 2;
+    return area;
+  }
+
+  cellCentroid(cell) {
+    var x = 0,
+      y = 0,
+      halfedges = cell.halfedges,
+      iHalfedge = halfedges.length,
+      halfedge,
+      v,
+      p1,
+      p2;
+    while (iHalfedge--) {
+      halfedge = halfedges[iHalfedge];
+      p1 = halfedge.getStartpoint();
+      p2 = halfedge.getEndpoint();
+      v = p1.x * p2.y - p2.x * p1.y;
+      x += (p1.x + p2.x) * v;
+      y += (p1.y + p2.y) * v;
+    }
+    v = this.cellArea(cell) * 6;
+    return { x: x / v, y: y / v };
+  }
+
   renderVornoi() {
     if (!this.diagram) {
       return;
     }
+
+    this.pathArray = [];
+    this.arcbounds = [];
 
     var edges = this.diagram.edges;
 
@@ -307,11 +388,7 @@ class N extends Component {
     return (
       <div>
         <div className="columns is-vcentered">
-          <div ref="svgcontainer" className="column is-fullheight is-8">
-            {/* <canvas id="myCanvas" resize /> */}
-
-            {/* <textarea id="svgOutput" rows="40" cols="100" /> */}
-          </div>
+          <div ref="svgcontainer" className="column is-fullheight is-8" />
           <div className="column is-4 is-offset-1">
             <h1 className="title is-2">Jigzaw puzzle generator</h1>
             <h2 className="subtitle is-4">
@@ -320,15 +397,13 @@ class N extends Component {
             <br />
 
             <div className="field">
-              <label className="label">
-                Desired pieces: {this.state.pieces}
-              </label>
-              <div className="control">
+              <label className="label">Pieces: {this.state.pieces}</label>
+              <div className="has-text-centered control">
                 <input
                   onChange={e => {
                     this.changePieces(e.target.value);
                   }}
-                  className="slider is-fullwidth is-success"
+                  className="slider is-success"
                   step="1"
                   min="4"
                   max="200"
@@ -337,9 +412,44 @@ class N extends Component {
                 />
               </div>
             </div>
+
+            <p className="has-text-centered">
+              <div class="field">
+                <input
+                  class="is-checkradio"
+                  onChange={e => {
+                    this.relaxit = e.target.checked;
+                    if (this.relaxit) {
+                      this.relaxSites();
+                    }
+                    this.setState({ relaxit: e.target.checked });
+                  }}
+                  id="exampleCheckboxDefault"
+                  type="checkbox"
+                  name="exampleCheckboxDefault"
+                  checked={this.state.relaxit}
+                />
+                <label for="exampleCheckboxDefault">
+                  Relax it {this.state.relaxit}
+                </label>
+              </div>
+            </p>
+            <br />
+            <a
+              className="button is-medium is-info is-outlined"
+              onClick={() => {
+                this.init();
+              }}
+            >
+              Another one!
+            </a>
+
             {this.state.stats_pieces && (
               <>
-                <p> Pieces: {this.state.stats_pieces} </p>
+                <br />
+                <br />
+                <h2 className="subtitle is-4">Export as</h2>
+
                 <button
                   className="button is-medium is-info is-outlined"
                   onClick={() => {
@@ -350,17 +460,6 @@ class N extends Component {
                 </button>
               </>
             )}
-
-            <p className="has-text-centered">
-              <a
-                className="button is-medium is-info is-outlined"
-                onClick={() => {
-                  this.init();
-                }}
-              >
-                Another one!
-              </a>
-            </p>
           </div>
         </div>
       </div>

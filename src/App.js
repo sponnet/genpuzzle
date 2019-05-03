@@ -1,7 +1,5 @@
 import React from "react";
 import "bulma/css/bulma.css";
-import "bulma-extensions/bulma-slider/dist/css/bulma-slider.min.css";
-import "bulma-extensions/bulma-slider/dist/js/bulma-slider.min.js";
 import Jigsaw1 from "./components/Jigsaw1";
 
 function App() {
