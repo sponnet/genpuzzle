@@ -28,7 +28,6 @@ class N extends Component {
     this.init();
   }
 
-  //----
 
   init() {
     this.ethersprovider = new ethers.providers.InfuraProvider("homestead");
