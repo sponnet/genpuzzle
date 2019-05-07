@@ -28,7 +28,6 @@ class N extends Component {
     this.init();
   }
 
-
   init() {
     this.ethersprovider = new ethers.providers.InfuraProvider("homestead");
 
@@ -47,7 +46,7 @@ class N extends Component {
     return new Promise(resolve => {
       this.sites = [];
       this.ethersprovider.getBlock(blockNumber).then(block => {
-        if (!block || !block.transactions){
+        if (!block || !block.transactions) {
           // no puzzle to make
           return resolve();
         }
@@ -451,8 +450,9 @@ class N extends Component {
         </div>
         <div>
           <p>
-            Re-enact the mining of a block in real life your family and kids or
-            create a unique present for someone you ♥.
+            Puzzle this block back together with your kids or create a unique
+            present for someone you ♥. Each transaction is represented by a
+            piece in this puzzle - large pieces are big transactions.
           </p>
         </div>
       </div>
