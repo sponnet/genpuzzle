@@ -47,6 +47,10 @@ class N extends Component {
     return new Promise(resolve => {
       this.sites = [];
       this.ethersprovider.getBlock(blockNumber).then(block => {
+        if (!block || !block.transactions){
+          // no puzzle to make
+          return resolve();
+        }
         Promise.all(
           block.transactions.map(tx => {
             return this.ethersprovider.getTransactionReceipt(tx);
