@@ -2,25 +2,21 @@ import React, { Component } from "react";
 import Voronoi from "voronoi";
 import makerjs from "makerjs";
 import { Point } from "paper";
-import Prando from "prando";
+import { ethers } from "ethers";
+import potpack from "potpack";
 import "bulma/css/bulma.css";
-// import "bulma-extensions/bulma-slider/dist/css/bulma-slider.min.css";
-// import "bulma-extensions/bulma-slider/dist/js/bulma-slider.min.js";
 import "bulma-extensions/bulma-checkradio/dist/css/bulma-checkradio.min.css";
 
 class N extends Component {
   constructor(props) {
     super();
 
-    // random number generator
-    this.rng = new Prando();
-
-    this.pieces = 50;
-    this.relaxit = true;
+    this.autoupdate = true;
 
     this.state = {
-      relaxit: this.relaxit,
-      pieces: this.pieces,
+      blocknumber: undefined,
+      autoupdate: this.autoupdate,
+      pieces: undefined,
       stats_pieces: undefined,
       stats_arcs: undefined
     };
@@ -28,74 +24,88 @@ class N extends Component {
 
   componentDidMount() {
     const svgc = this.refs.svgcontainer;
-
-    this.bbox = {
-      xl: 0,
-      xr: svgc.clientWidth,
-      yt: 0,
-      yb: Math.floor((svgc.clientWidth / 800) * 600)
-    };
-
+    this.puzzlemaxsize = Math.floor((svgc.clientWidth / 800) * 600);
     this.init();
-  }
-
-  changePieces(amount) {
-    // debugger;
-    this.pieces = amount;
-    this.setState({
-      pieces: amount
-    });
-    this.randomSites();
-    this.renderVornoi();
   }
 
   //----
 
   init() {
-    if (!this.bbox) {
-      return;
-    }
+    this.ethersprovider = new ethers.providers.InfuraProvider("homestead");
 
-    this.voronoi = new Voronoi();
-
-    this.diagram = null;
-    this.margin = 0;
-    this.svg = null;
-
-    this.randomSites();
-    this.renderVornoi();
-  }
-
-  randomSites() {
-    //debugger;
-    const margin = 0.1; //percent
-
-    // const xl = (this.bbox.xr * margin) / 100;
-    // const xr = (this.bbox.xr * (100 - 2 * margin)) / 100;
-    // const yt = (this.bbox.yb * margin) / 100;
-    // const yb = (this.bbox.yb * (100 - 2 * margin)) / 100;
-
-    const xmargin = this.bbox.xr * this.margin;
-    const ymargin = this.bbox.yb * this.margin;
-    const xo = xmargin;
-    const dx = this.bbox.xr - xmargin * 2;
-    const yo = ymargin;
-    const dy = this.bbox.yb - ymargin * 2;
-
-    this.sites = [];
-    for (var i = 0; i < this.pieces; i++) {
-      this.sites.push({
-        x: Math.round((xo + Math.random() * dx) * 10) / 10,
-        y: Math.round((yo + Math.random() * dy) * 10) / 10
+    this.ethersprovider.getBlockNumber().then(blocknumber => {
+      this.blockSites(blocknumber).then(() => {
+        this.ethersprovider.on("block", newblocknr => {
+          if (this.autoupdate) {
+            this.blockSites(newblocknr);
+          }
+        });
       });
-    }
-
-    this.voronoi.recycle(this.diagram);
-    this.diagram = this.voronoi.compute(this.sites, this.bbox);
-    this.relaxSites();
+    });
   }
 
-  // manipulate the edge
+  blockSites(blockNumber) {
+    return new Promise(resolve => {
+      this.sites = [];
+      this.ethersprovider.getBlock(blockNumber).then(block => {
+        Promise.all(
+          block.transactions.map(tx => {
+            return this.ethersprovider.getTransactionReceipt(tx);
+          })
+        ).then(receipts => {
+          const scale =
+            this.puzzlemaxsize /
+            Math.floor(Math.sqrt(block.gasUsed.toNumber()));
+
+          let boxes = receipts.map(receipt => {
+            if (receipt) {
+              const size = Math.floor(
+                scale * Math.sqrt(receipt.gasUsed.toNumber())
+              );
+              return { w: size, h: size };
+            } else {
+              return { w: 0, h: 0 };
+            }
+          });
+
+          const { w, h, fill } = potpack(boxes);
+
+          this.bbox = {
+            xl: 0,
+            xr: w,
+            yt: 0,
+            yb: h
+          };
+
+          boxes.forEach(box => {
+            this.sites.push({
+              x: Math.round(box.x + box.w / 2),
+              y: Math.round(box.y + box.h / 2)
+            });
+          });
+
+          this.voronoi = new Voronoi();
+
+          this.diagram = null;
+          this.margin = 0;
+          this.svg = null;
+
+          this.voronoi.recycle(this.diagram);
+          this.diagram = this.voronoi.compute(this.sites, this.bbox);
+
+          this.setState({ blocknumber: blockNumber, pieces: boxes.length });
+
+          this.renderVornoi();
+          this.relaxSites(0);
+
+          return resolve();
+        });
+      });
+    });
+  }
+
+  // draw an edge - returns true if it drew a tip
+  // false if it drew a line
   draw_edge(edge) {
     // some helper functions
     const overlapsWithOtherArc = arcToTest => {
@@ -211,13 +221,14 @@ class N extends Component {
     this.pathArray.push(
       new makerjs.paths.Line([start.x, start.y], [end.x, end.y])
     );
+    return false;
   }
 
   line(x0, y0, x1, y1) {
     this.pathArray.push(new makerjs.paths.Line([x0, y0], [x1, y1]));
   }
 
-  relaxSites() {
+  relaxSites(count) {
     // debugger;
     if (!this.diagram) {
       return;
@@ -242,10 +253,10 @@ class N extends Component {
       dist = this.distance(site, cell.site);
       again = again || dist > 1;
       // don't relax too fast
-      // if (dist > 2) {
-      //   site.x = (site.x + cell.site.x) / 2;
-      //   site.y = (site.y + cell.site.y) / 2;
-      // }
+      if (dist > 2) {
+        site.x = (site.x + cell.site.x) / 2;
+        site.y = (site.y + cell.site.y) / 2;
+      }
       // probability of mytosis
       if (rn > 1 - p) {
         dist /= 2;
@@ -260,10 +271,10 @@ class N extends Component {
 
     this.renderVornoi();
 
-    if (this.relaxit) {
+    if (count < 6) {
       setTimeout(() => {
-        this.relaxSites();
-      }, 0);
+        this.relaxSites(count + 1);
+      }, count * 10);
     }
   }
 
@@ -322,10 +333,13 @@ class N extends Component {
 
     var edges = this.diagram.edges;
 
+    var smalledges = 0;
     for (var e = 0; e < edges.length; e++) {
       const edge = edges[e];
       if (edge.rSite) {
-        this.draw_edge(edge);
+        if (!this.draw_edge(edge)) {
+          smalledges++;
+        }
       } else {
         // it's an edge of the puzzle
       }
@@ -348,7 +362,12 @@ class N extends Component {
     // svgc.src = url;
 
     this.setState({
-      stats_pieces: this.sites.length
+      edges: edges.length,
+      smalledges: smalledges,
+      quality:
+        edges.length === 0
+          ? 100
+          : Math.round((1 - smalledges / edges.length) * 100)
     });
   }
 
@@ -357,13 +376,6 @@ class N extends Component {
     const svg = makerjs.exporter.toSVG(this.pathArray);
     this.download(fileName, svg);
   }
-
-  //   downloaddxf(){
-  //     const fileName = `puzzle-${Date.now()}.dxf`;
-  //     debugger;
-  //     const svg = makerjs.exporter.toDXF(this.pathArray,{});
-  //   this.download(fileName,svg);
-  // }
 
   download(filename, text) {
     var element = document.createElement("a");
@@ -390,65 +402,37 @@ class N extends Component {
         <div className="columns is-vcentered">
           <div ref="svgcontainer" className="column is-fullheight is-8" />
           <div className="column is-4 is-offset-1">
-            <h1 className="title is-2">Jigzaw puzzle generator</h1>
+            <h1 className="title is-2">Ethereum block puzzle generator</h1>
             <h2 className="subtitle is-4">
-              Creates a random puzzle to lasercut
+              Creates a block puzzle to lasercut
             </h2>
             <br />
-
-            <div className="field">
-              <label className="label">Pieces: {this.state.pieces}</label>
-              <div className="has-text-centered control">
-                <input
-                  onChange={e => {
-                    this.changePieces(e.target.value);
-                  }}
-                  className="slider is-success"
-                  step="1"
-                  min="4"
-                  max="200"
-                  value={this.state.pieces}
-                  type="range"
-                />
-              </div>
-            </div>
-
-            <p className="has-text-centered">
-              <div class="field">
-                <input
-                  class="is-checkradio"
-                  onChange={e => {
-                    this.relaxit = e.target.checked;
-                    if (this.relaxit) {
-                      this.relaxSites();
-                    }
-                    this.setState({ relaxit: e.target.checked });
-                  }}
-                  id="exampleCheckboxDefault"
-                  type="checkbox"
-                  name="exampleCheckboxDefault"
-                  checked={this.state.relaxit}
-                />
-                <label for="exampleCheckboxDefault">
-                  Relax it {this.state.relaxit}
-                </label>
-              </div>
-            </p>
-            <br />
-            <a
-              className="button is-medium is-info is-outlined"
-              onClick={() => {
-                this.init();
-              }}
-            >
-              Another one!
-            </a>
-
-            {this.state.stats_pieces && (
+            {this.state.pieces && (
               <>
+                <h2 className="subtitle is-4">
+                  Block: {this.state.blocknumber}
+                </h2>
+
+                <div className="field">
+                  <input
+                    className="is-checkradio"
+                    onChange={e => {
+                      this.autoupdate = e.target.checked;
+                      this.setState({ autoupdate: e.target.checked });
+                    }}
+                    id="exampleCheckboxDefault"
+                    type="checkbox"
+                    name="exampleCheckboxDefault"
+                    checked={this.state.autoupdate}
+                  />
+                  <label for="exampleCheckboxDefault">Auto update</label>
+                </div>
                 <br />
                 <br />
-                <h2 className="subtitle is-4">Export as</h2>
+                <h2 className="subtitle is-4">Pieces: {this.state.pieces}</h2>
+                <h2 className="subtitle is-4">
+                  Printability: {this.state.quality}%
+                </h2>
 
                 <button
                   className="button is-medium is-info is-outlined"
@@ -456,11 +440,17 @@ class N extends Component {
                     this.downloadsvg();
                   }}
                 >
-                  SVG
+                  DOWNLOAD AS SVG
                 </button>
               </>
             )}
           </div>
+        </div>
+        <div>
+          <p>
+            Re-enact the mining of a block in real life your family and kids or
+            create a unique present for someone you ♥.
+          </p>
         </div>
       </div>
     );
