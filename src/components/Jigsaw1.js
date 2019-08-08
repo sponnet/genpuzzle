@@ -358,12 +358,15 @@ class N extends Component {
     this.download(fileName, svg);
   }
 
-  //   downloaddxf(){
-  //     const fileName = `puzzle-${Date.now()}.dxf`;
-  //     debugger;
-  //     const svg = makerjs.exporter.toDXF(this.pathArray,{});
-  //   this.download(fileName,svg);
-  // }
+    downloaddxf(){
+      const fileName = `puzzle-${Date.now()}.dxf`;
+      let model ={};
+      this.pathArray.map((el,i)=>{
+              model[i.toString()] = el;
+      })
+      const svg = makerjs.exporter.toDXF({ paths: model });
+    this.download(fileName,svg);
+  }
 
   download(filename, text) {
     var element = document.createElement("a");
@@ -457,6 +460,14 @@ class N extends Component {
                   }}
                 >
                   SVG
+                </button>
+                <button
+                  className="button is-medium is-info is-outlined"
+                  onClick={() => {
+                    this.downloaddxf();
+                  }}
+                >
+                  DXF
                 </button>
               </>
             )}
